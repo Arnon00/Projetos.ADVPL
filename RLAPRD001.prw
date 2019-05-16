@@ -1,0 +1,128 @@
+#INCLUDE "PROTHEUS.CH"
+#INCLUDE "FILEIO.CH"                          // importações 
+#INCLUDE "TBICONN.CH"
+
+/*/
+ÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜÜ
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+±±ÉÍÍÍÍ,ÍÍÍÍÍÍÑÍÍÍÍÍÍÍÍÍÍËÍÍÍÍÍÍÍÑÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍËÍÍÍÍÍÍÑÍÍÍÍÍÍÍÍÍÍÍÍÍ±±
+±±ºPrograma  ³ RLAPRD001  º Autor/Adaptador Arnon d. ³  º Data 15/05³     º±±
+±±ÌÍÍÍÍÍÍÍÍÍÍØÍÍÍÍÍÍÍÍÍÍÊÍÍÍÍÍÍÍÏÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÊÍÍÍÍÍÍÏÍÍÍÍÍÍÍÍÍÍÍÍÍ¹±±
+±±ºDescricao ³Relatorio Movimentacoes internas de despesas de importacao  º±±
+±±º          ³                                                            º±±
+±±ÌÍÍÍÍÍÍÍÍÍÍØÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¹±±
+±±ºUso       ³                                                            º±±
+±±ÈÍÍÍÍÍÍÍÍÍÍÏÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍÍ¼±±
+±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±±
+ßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßßß
+/*/
+	User Function RLAPRD001()           // criando a user function -> ponto de entrada no programa, semelhante ao metodo MAIN*?
+
+	Local aPergs := {}
+	Private lRet := .F.
+	Private aRet := {}
+	PRIVATE cTitulo := "TABELA DE CLIENTES E ITENS DE VENDAS"
+
+	Aadd( aPergs ,{1,"Emissao De      " ,FirstDate(dDatabase) ,"@E 99/99/9999","","","",100,.F.})
+	Aadd( aPergs ,{1,"Emissão Ate     " ,LastDate(dDatabase)  ,"@E 99/99/9999","","","",100,.T.})
+
+	If ParamBox(aPergs ," Parametros - "+cTitulo,aRet)
+
+		MsgRun("Favor Aguardar.....", "Selecionando os Registros... "+cTitulo,{|| GeraItens()})      // Chamando a função GeraItens
+		if !lRet
+			Aviso( cTitulo,"Nenhum dado gerado! Verifique os parametros utilizados.",{"OK"},3)
+		Endif
+
+	EndIf
+
+Return()
+
+Static Function GeraItens( aCols )           		 // iniciando a função que retornara um result set  
+
+	Local cAlias := GetNextAlias()           		 // variavel de retorno de alias (TABELA TEMPORARIA)
+	Local cQuery := ""                       		 // variavel que vai transportar a Query
+	Local cArq := ""
+	Local cDir := GetSrvProfString("Startpath","")   // Recupera o conteúdo de uma chave de configuração, do ambiente em uso(?)
+	Local cPlanilha := "NOTAS"      		 		 // Variavel (com String)
+	Local cTable := ""               		 		 // Variavel (Vazia)
+	Local cDirTmp := GetTempPath()           		 // retorna uma pasta temporaria do sistema
+	Local oExcel := FWMSEXCEL():New()        		 //	construtor 
+
+	cQuery := " SELECT A1_COD, A1_NOME, A1_LOJA, D2_FILIAL, D2_COD, D2_DOC, D2_ITEM, D2_QUANT, D2_PRCVEN, D2_TOTAL, D2_EMISSAO, D2_TES, F4_FINALID"
+	cQuery += " FROM "+RETSQLNAME("SD2")+" SD2, "+RETSQLNAME("SA1")+" SA1, "+RETSQLNAME("SF4")+" SF4"	
+	cQuery += " WHERE "
+	cQuery += " D2_LOJA = A1_LOJA "
+	cQuery += " AND A1_COD = D2_CLIENTE "
+	cQuery += " AND D2_TES = F4_CODIGO "
+	cQuery += " AND A1_FILIAL = '"+XFILIAL("SA1")+"' AND SA1.D_E_L_E_T_ <> '*' "  	
+	cQuery += " AND D2_FILIAL = '"+XFILIAL("SD2")+"' AND SD2.D_E_L_E_T_ <> '*' "
+	cQuery += " AND D2_FILIAL = '"+XFILIAL("SF4")+"' AND SF4.D_E_L_E_T_ <> '*' " 
+	cQuery += " AND D2_EMISSAO BETWEEN '"+DTOS(aRet[1])+"' AND '"+DTOS(aRet[2])+"' "
+	cQuery += " ORDER BY D2_EMISSAO "
+	// a cada linha vai concatenando as strings, formando assim a Query
+	PLSQuery(cQuery,cAlias)   // função para execução de uma instrução sql, (PLSQuery = consulta e TcSqlExec = alteração), 
+                              //(Query,Registros da tabela das tabelas)
+	DbSelectArea(cAlias)      // define a area de trabalho especificada como ativa... (neste caso, qual tabela estamos trabalhando no momento)
+	(cAlias)->(DbGoTop())     // Sobe para o primeiro registro da tabela
+	ProcRegua(RecCount())     // indicação de continuidade do processo. 
+
+	oExcel:AddworkSheet(cPlanilha)
+	oExcel:AddTable (cPlanilha,cTitulo)
+
+	oExcel:AddColumn(cPlanilha,cTitulo,"CLIENTE CODIGO",1,2)
+	oExcel:AddColumn(cPlanilha,cTitulo,"CLIENTE NOME",1,1)
+	oExcel:AddColumn(cPlanilha,cTitulo,"CLIENTE LOJA",2,2)
+	oExcel:AddColumn(cPlanilha,cTitulo,"FILIAL",2,1)
+	oExcel:AddColumn(cPlanilha,cTitulo,"PRODUTO",1,2)
+	oExcel:AddColumn(cPlanilha,cTitulo,"NUMERO NOTA",1,1)
+	oExcel:AddColumn(cPlanilha,cTitulo,"ITEM",2,1)
+	oExcel:AddColumn(cPlanilha,cTitulo,"QUANTIDADE",2,1)
+	oExcel:AddColumn(cPlanilha,cTitulo,"VAL UNITARIO",1,3)
+	oExcel:AddColumn(cPlanilha,cTitulo,"VAL TOTAL",1,3)
+	oExcel:AddColumn(cPlanilha,cTitulo,"EMISSAO",1,4) 
+	oExcel:AddColumn(cPlanilha,cTitulo,"TIPO SAIDA",2,2)
+	oExcel:AddColumn(cPlanilha,cTitulo,"FINALIDADE",1,1)  
+	   
+			/*
+	   		FWMsExcel():AddColumn(< cWorkSheet >, < cTable >, < cColumn >, < nAlign >, < nFormat >, < lTotal >) 
+	   		cWorkSheet  ->	Nome da planilha	 
+ 			cTable 		->	Nome da planilha 
+ 			cColumn		->	Titulo da tabela que será adicionada	 
+   			nAlign		->	Alinhamento da coluna ( 1-Left,2-Center,3-Right )	 
+ 			nFormat		->	Codigo de formatação ( 1-General,2-Number,3-Monetário,4-DateTime )	 
+			lTotal		->	Indica se a coluna deve ser totalizada
+			*/
+
+	While !(cAlias)->(EOF())           // fim da tabela
+
+		IncProc("Aguarde o Processamento...")
+		oExcel:AddRow(cPlanilha,cTitulo, { (cAlias)->A1_COD, (cAlias)->A1_NOME, (cAlias)->A1_LOJA, (cAlias)->D2_FILIAL,;
+		(cAlias)->D2_COD, (cAlias)->D2_DOC, (cAlias)->D2_ITEM, (cAlias)->D2_QUANT, (cAlias)->D2_PRCVEN, (cAlias)->D2_TOTAL,;
+		(cAlias)->D2_EMISSAO, (cAlias)->D2_TES, (cAlias)->F4_FINALID} )
+
+		(cAlias)->(DbSkip())           //pula para a proxima linha 
+		lRet := .T.        			   // possivel futura mudança, verificar antes de tentar gerar a .t.
+
+	EndDo
+
+	(cAlias)->(DbCloseArea())
+	MsErase(cAlias)
+
+	oExcel:Activate()
+
+	cArq := CriaTrab( NIL, .F. ) + ".xml"
+	LjMsgRun( "Gerando o arquivo, aguarde...", cPlanilha, {|| oExcel:GetXMLFile( cArq ) } )
+	If __CopyFile( cArq, cDirTmp + cArq )
+		IF (ApOleClient("MsExcel"))
+			oExcelApp := MsExcel():New()
+			oExcelApp:WorkBooks:Open( cDirTmp + cArq )
+			oExcelApp:SetVisible(.T.)
+		Else
+			MsgInfo("MsExcel não instalado")
+		EndIf
+		MsgInfo( "Arquivo " + cArq + " gerado com sucesso no diretório " + cDir )
+	Else
+		MsgInfo( "Arquivo não copiado para temporário do usuário." )
+	Endif
+	FERASE(cArq)
+Return()
